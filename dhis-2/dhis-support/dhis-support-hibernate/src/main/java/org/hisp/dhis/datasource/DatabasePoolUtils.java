@@ -35,6 +35,7 @@ import java.util.Objects;
 
 import javax.sql.DataSource;
 
+import com.mchange.v2.c3p0.DriverManagerDataSource;
 import lombok.Builder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -59,7 +60,8 @@ public class DatabasePoolUtils
     public enum dbPoolTypes
     {
         C3P0,
-        HIKARI
+        HIKARI,
+        UNPOOLED
     }
 
     @Data
@@ -93,7 +95,7 @@ public class DatabasePoolUtils
 
         dbPoolTypes dbType = dbPoolTypes.valueOf( config.dbPoolType.toUpperCase() );
 
-        if ( dbType == dbPoolTypes.C3P0 )
+        if ( dbType == dbPoolTypes.C3P0 || dbType == dbPoolTypes.UNPOOLED )
         {
             return createC3p0DbPool( config );
         }
@@ -155,7 +157,6 @@ public class DatabasePoolUtils
         SQLException
     {
         DhisConfigurationProvider dhisConfig = config.getDhisConfig();
-
         final String driverClassName = dhisConfig.getProperty( ConfigurationKey.CONNECTION_DRIVER_CLASS );
         final String jdbcUrl = MoreObjects.firstNonNull( config.getJdbcUrl(),
             dhisConfig.getProperty( ConfigurationKey.CONNECTION_URL ) );
@@ -163,45 +164,62 @@ public class DatabasePoolUtils
             dhisConfig.getProperty( ConfigurationKey.CONNECTION_USERNAME ) );
         final String password = MoreObjects.firstNonNull( config.getPassword(),
             dhisConfig.getProperty( ConfigurationKey.CONNECTION_PASSWORD ) );
-        final int maxPoolSize = Integer.parseInt( MoreObjects.firstNonNull( config.getMaxPoolSize(),
-            dhisConfig.getProperty( ConfigurationKey.CONNECTION_POOL_MAX_SIZE ) ) );
-        final int acquireIncrement = Integer.parseInt( MoreObjects.firstNonNull( config.getAcquireIncrement(),
-            dhisConfig.getProperty( ConfigurationKey.CONNECTION_POOL_ACQUIRE_INCR ) ) );
-        final int maxIdleTime = Integer.parseInt( MoreObjects.firstNonNull( config.maxIdleTime,
-            dhisConfig.getProperty( ConfigurationKey.CONNECTION_POOL_MAX_IDLE_TIME ) ) );
 
-        final int minPoolSize = Integer.parseInt( dhisConfig.getProperty( ConfigurationKey.CONNECTION_POOL_MIN_SIZE ) );
-        final int initialSize = Integer
-            .parseInt( dhisConfig.getProperty( ConfigurationKey.CONNECTION_POOL_INITIAL_SIZE ) );
-        boolean testOnCheckIn = dhisConfig.isEnabled( ConfigurationKey.CONNECTION_POOL_TEST_ON_CHECKIN );
-        boolean testOnCheckOut = dhisConfig.isEnabled( ConfigurationKey.CONNECTION_POOL_TEST_ON_CHECKOUT );
-        final int maxIdleTimeExcessConnections = Integer
-            .parseInt( dhisConfig.getProperty( ConfigurationKey.CONNECTION_POOL_MAX_IDLE_TIME_EXCESS_CON ) );
-        final int idleConnectionTestPeriod = Integer
-            .parseInt( dhisConfig.getProperty( ConfigurationKey.CONNECTION_POOL_IDLE_CON_TEST_PERIOD ) );
-        final String preferredTestQuery = dhisConfig.getProperty( ConfigurationKey.CONNECTION_POOL_TEST_QUERY );
-        final int numHelperThreads = Integer
-            .parseInt( dhisConfig.getProperty( ConfigurationKey.CONNECTION_POOL_NUM_THREADS ) );
+        final DataSource dataSource;
+        dbPoolTypes dbType = dbPoolTypes.valueOf( config.dbPoolType.toUpperCase() );
+        if ( dbType.equals( dbPoolTypes.UNPOOLED ) )
+        {
+            DriverManagerDataSource unpooledDataSource = new DriverManagerDataSource();
+            unpooledDataSource.setDriverClass( driverClassName );
+            unpooledDataSource.setJdbcUrl( jdbcUrl );
+            unpooledDataSource.setUser( username );
+            unpooledDataSource.setPassword( password );
 
-        ComboPooledDataSource dataSource = new ComboPooledDataSource();
-        dataSource.setDriverClass( driverClassName );
-        dataSource.setJdbcUrl( jdbcUrl );
-        dataSource.setUser( username );
-        dataSource.setPassword( password );
-        dataSource.setMaxPoolSize( maxPoolSize );
-        dataSource.setMinPoolSize( minPoolSize );
-        dataSource.setInitialPoolSize( initialSize );
-        dataSource.setAcquireIncrement( acquireIncrement );
-        dataSource.setMaxIdleTime( maxIdleTime );
-        dataSource.setTestConnectionOnCheckin( testOnCheckIn );
-        dataSource.setTestConnectionOnCheckout( testOnCheckOut );
-        dataSource.setMaxIdleTimeExcessConnections( maxIdleTimeExcessConnections );
-        dataSource.setIdleConnectionTestPeriod( idleConnectionTestPeriod );
-        dataSource.setPreferredTestQuery( preferredTestQuery );
-        dataSource.setNumHelperThreads( numHelperThreads );
+            dataSource = unpooledDataSource;
+        }
+        else
+        {
+            final int maxPoolSize = Integer.parseInt( MoreObjects.firstNonNull( config.getMaxPoolSize(),
+                dhisConfig.getProperty( ConfigurationKey.CONNECTION_POOL_MAX_SIZE ) ) );
+            final int acquireIncrement = Integer.parseInt( MoreObjects.firstNonNull( config.getAcquireIncrement(),
+                dhisConfig.getProperty( ConfigurationKey.CONNECTION_POOL_ACQUIRE_INCR ) ) );
+            final int maxIdleTime = Integer.parseInt( MoreObjects.firstNonNull( config.maxIdleTime,
+                dhisConfig.getProperty( ConfigurationKey.CONNECTION_POOL_MAX_IDLE_TIME ) ) );
+
+            final int minPoolSize = Integer.parseInt( dhisConfig.getProperty( ConfigurationKey.CONNECTION_POOL_MIN_SIZE ) );
+            final int initialSize = Integer
+                .parseInt( dhisConfig.getProperty( ConfigurationKey.CONNECTION_POOL_INITIAL_SIZE ) );
+            boolean testOnCheckIn = dhisConfig.isEnabled( ConfigurationKey.CONNECTION_POOL_TEST_ON_CHECKIN );
+            boolean testOnCheckOut = dhisConfig.isEnabled( ConfigurationKey.CONNECTION_POOL_TEST_ON_CHECKOUT );
+            final int maxIdleTimeExcessConnections = Integer
+                .parseInt( dhisConfig.getProperty( ConfigurationKey.CONNECTION_POOL_MAX_IDLE_TIME_EXCESS_CON ) );
+            final int idleConnectionTestPeriod = Integer
+                .parseInt( dhisConfig.getProperty( ConfigurationKey.CONNECTION_POOL_IDLE_CON_TEST_PERIOD ) );
+            final String preferredTestQuery = dhisConfig.getProperty( ConfigurationKey.CONNECTION_POOL_TEST_QUERY );
+            final int numHelperThreads = Integer
+                .parseInt( dhisConfig.getProperty( ConfigurationKey.CONNECTION_POOL_NUM_THREADS ) );
+
+            ComboPooledDataSource pooledDataSource = new ComboPooledDataSource();
+            pooledDataSource.setDriverClass( driverClassName );
+            pooledDataSource.setJdbcUrl( jdbcUrl );
+            pooledDataSource.setUser( username );
+            pooledDataSource.setPassword( password );
+            pooledDataSource.setMaxPoolSize( maxPoolSize );
+            pooledDataSource.setMinPoolSize( minPoolSize );
+            pooledDataSource.setInitialPoolSize( initialSize );
+            pooledDataSource.setAcquireIncrement( acquireIncrement );
+            pooledDataSource.setMaxIdleTime( maxIdleTime );
+            pooledDataSource.setTestConnectionOnCheckin( testOnCheckIn );
+            pooledDataSource.setTestConnectionOnCheckout( testOnCheckOut );
+            pooledDataSource.setMaxIdleTimeExcessConnections( maxIdleTimeExcessConnections );
+            pooledDataSource.setIdleConnectionTestPeriod( idleConnectionTestPeriod );
+            pooledDataSource.setPreferredTestQuery( preferredTestQuery );
+            pooledDataSource.setNumHelperThreads( numHelperThreads );
+
+            dataSource = pooledDataSource;
+        }
 
         testConnection( dataSource );
-
         return dataSource;
     }
 

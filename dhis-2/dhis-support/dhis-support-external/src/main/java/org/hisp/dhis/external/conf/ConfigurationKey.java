@@ -626,7 +626,7 @@ public enum ConfigurationKey
 
     /**
      * Database datasource pool type. Supported pool types are: c3p0 (default)
-     * or hikari
+     * or hikari or unpooled
      */
     DB_POOL_TYPE( "db.pool.type", "c3p0", false ),
 
